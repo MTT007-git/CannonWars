@@ -1,14 +1,8 @@
 ﻿from tkinter import *
 from tkinter.messagebox import showinfo
-from tkinter.simpledialog import askstring
 import matplotlib.pyplot as plt
-import threading
-import network
 import math
 import time
-import json
-
-# network.LOG = False
 
 FLOOR_HEIGHT = 540
 WHEEL_DIAMETER = 20
@@ -83,52 +77,50 @@ def onpress(e):
                       speed[0], speed[1], "red"])
         p1_last_shot = time.time()
     if key == "left":
-        p1_dx = -SPEED
+        p2_dx = -SPEED
     if key == "right":
-        p1_dx = SPEED
+        p2_dx = SPEED
     if key == "down":
-        p1_dr = -ROT_SPEED
+        p2_dr = -ROT_SPEED
     if key == "up":
-        p1_dr = ROT_SPEED
-    if key in ("shift_r", "next", "return", "control_r") and time.time() - p1_last_shot > RECHARGE:
-        p1_drecoil = RECOIL
-        pnt = rotate_point(WHEEL_SPACE + WHEEL_DIAMETER, 0, math.radians(-p1_r))
-        speed = rotate_point(BALL_SPEED, 0, math.radians(-p1_r))
-        balls.append([p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 + pnt[0],
+        p2_dr = ROT_SPEED
+    if key in ("shift_r", "next", "return", "control_r") and time.time() - p2_last_shot > RECHARGE:
+        p2_drecoil = RECOIL
+        pnt = rotate_point(-WHEEL_SPACE - WHEEL_DIAMETER, 0, math.radians(p2_r))
+        speed = rotate_point(-BALL_SPEED, 0, math.radians(p2_r))
+        balls.append([p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + pnt[0],
                       FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2 + pnt[1],
-                      speed[0], speed[1], "red"])
-        p1_last_shot = time.time()
+                      speed[0], speed[1], "green"])
+        p2_last_shot = time.time()
 
 
 def onrelease(e):
-    global p1_dx, p1_dr
+    global p1_dx, p1_dr, p2_dx, p2_dr
     key = e.keysym.lower()
     if key in ("a", "d"):
         p1_dx = 0
     if key in ("s", "w"):
         p1_dr = 0
     if key in ("left", "right"):
-        p1_dx = 0
+        p2_dx = 0
     if key in ("down", "up"):
-        p1_dr = 0
+        p2_dr = 0
 
 
 def update():
     global last_time, p1_x, p1_r, p1_recoil, p1_drecoil, p1_health, p2_x, p2_r, p2_recoil, p2_drecoil, p2_health
-    p1_health_history.append(p1_health)
-    p2_health_history.append(p2_health)
     if p1_health <= 0 or p2_health <= 0:
         if p1_health <= 0 and p2_health <= 0:
             showinfo("The game ended", "The game ended.\nIt's a tie")
         elif p1_health <= 0:
-            showinfo("The game ended", "The game ended.\nYou lost")
+            showinfo("The game ended", "The game ended.\nGreen won")
         else:
-            showinfo("The game ended", "The game ended.\nYou won")
+            showinfo("The game ended", "The game ended.\nRed won")
         root.destroy()
-        plt.plot(p2_health_history, color="green")
         plt.plot(p1_health_history, color="red")
+        plt.plot(p2_health_history, color="green")
         plt.show()
-        exit(0)
+        return
     tm = time.time() - last_time
     p1_x = min(640 - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5,
                max(0 + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p1_x + p1_dx * tm))
@@ -136,6 +128,12 @@ def update():
     p1_drecoil -= p1_drecoil * RECOIL_LOSS * tm
     p1_recoil += p1_drecoil * tm
     p1_recoil -= p1_recoil * RECOIL_LOSS * tm
+    p2_x = min(640 - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5,
+               max(0 + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p2_x + p2_dx * tm))
+    p2_r = min(89, max(1, p2_r + p2_dr * tm))
+    p2_drecoil -= p2_drecoil * RECOIL_LOSS * tm
+    p2_recoil += p2_drecoil * tm
+    p2_recoil -= p2_recoil * RECOIL_LOSS * tm
     for i in balls:
         i[3] += GRAVITY * tm
         i[2] -= i[2] * AIR_FRICTION * tm
@@ -217,47 +215,12 @@ def update():
     c.create_rectangle(10, 10, p1_health + 10, 20, fill="red")
     c.create_rectangle(630 - MAX_HEALTH, 10, 630, 20)
     c.create_rectangle(530, 10, 530 + p2_health, 20, fill="green")
+    p1_health_history.append(p1_health)
+    p2_health_history.append(p2_health)
     root.after(1, update)
 
 
-def update_net():
-    global p2_x, p2_r, p2_recoil, p2_health, balls
-    try:
-        while True:
-            net.send_str(str(640 - p1_x))
-            net.send_str(str(p1_r))
-            net.send_str(str(p1_recoil))
-            net.send_str(str(p1_health))
-            net.send_str(json.dumps([[640 - i[0], i[1], -i[2], i[3], "green"] for i in balls if i[4] == "red"]))
-            p2_x = float(net.recv_str())
-            p2_r = float(net.recv_str())
-            p2_recoil = float(net.recv_str())
-            p2_health = float(net.recv_str())
-            balls = [i for i in balls if i[4] == "red"] + json.loads(net.recv_str())
-    except ConnectionResetError:
-        p2_health = 0
-
-
-def connect():
-    global net
-    net.connect()
-
-
-room = askstring("Enter room code", "Enter room code\nLeave empty for public room")
-if room is None:
-    exit(0)
 root = Tk()
-root.state("zoomed")
-root.title("Please wait")
-net = network.Network(1, broadcast_msg=f"SEARCH_FOR_CANNON_GAME_SERVER_{room}".encode("utf-8"),
-                      broadcast_reply=f"THIS_IS_CANNON_GAME_SERVER_{room}".encode("utf-8"), log=False)
-connect_thread = threading.Thread(target=connect)
-connect_thread.start()
-lbl = Label(text="Waiting for the other player to connect...", font=("TkDefaultFont", 32))
-lbl.pack()
-while connect_thread.is_alive():
-    root.update()
-lbl.destroy()
 root.title("Battle")
 c = Canvas(width=640, height=640, bg="white")
 c.pack()
@@ -283,7 +246,6 @@ p2_health_history = []
 balls = []
 
 last_time = time.time()
-threading.Thread(target=update_net, daemon=True).start()
 update()
 
 root.bind("<KeyPress>", onpress)
