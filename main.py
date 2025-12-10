@@ -8,8 +8,6 @@ import math
 import time
 import json
 
-# network.LOG = False
-
 FLOOR_HEIGHT = 540
 WHEEL_DIAMETER = 20
 WHEEL_SPACE = 50
@@ -136,13 +134,19 @@ def update():
     p1_drecoil -= p1_drecoil * RECOIL_LOSS * tm
     p1_recoil += p1_drecoil * tm
     p1_recoil -= p1_recoil * RECOIL_LOSS * tm
+    p2_x = min(640 - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5,
+               max(0 + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p2_x + p2_dx * tm))
+    p2_r = min(89, max(1, p2_r + p2_dr * tm))
+    p2_drecoil -= p2_drecoil * RECOIL_LOSS * tm
+    p2_recoil += p2_drecoil * tm
+    p2_recoil -= p2_recoil * RECOIL_LOSS * tm
     for i in balls:
         i[3] += GRAVITY * tm
         i[2] -= i[2] * AIR_FRICTION * tm
         i[3] -= i[3] * AIR_FRICTION * tm
         i[0] += i[2] * tm
         i[1] += i[3] * tm
-        if i[1] > FLOOR_HEIGHT - BALL_DIAMETER / 2:
+        if i[1] >= FLOOR_HEIGHT - BALL_DIAMETER / 2:
             i[1] = FLOOR_HEIGHT - BALL_DIAMETER / 2
             i[2] -= i[2] * FLOOR_FRICTION * tm
             i[3] = 0
@@ -221,19 +225,14 @@ def update():
 
 
 def update_net():
-    global p2_x, p2_r, p2_recoil, p2_health, balls
+    global p2_x, p2_dx, p2_r, p2_dr, p2_recoil, p2_drecoil, p2_health, balls
     try:
         while True:
-            net.send_str(str(640 - p1_x))
-            net.send_str(str(p1_r))
-            net.send_str(str(p1_recoil))
-            net.send_str(str(p1_health))
-            net.send_str(json.dumps([[640 - i[0], i[1], -i[2], i[3], "green"] for i in balls if i[4] == "red"]))
-            p2_x = float(net.recv_str())
-            p2_r = float(net.recv_str())
-            p2_recoil = float(net.recv_str())
-            p2_health = float(net.recv_str())
-            balls = [i for i in balls if i[4] == "red"] + json.loads(net.recv_str())
+            net.send_str(json.dumps(
+                [640 - p1_x, -p1_dx, p1_r, p1_dr, p1_recoil, p1_drecoil, p1_health,
+                 [[640 - i[0], i[1], -i[2], i[3], "green"] for i in balls if i[4] == "red"]]))
+            p2_x, p2_dx, p2_r, p2_dr, p2_recoil, p2_drecoil, p2_health, b = json.loads(net.recv_str())
+            balls = [i for i in balls if i[4] == "red"] + b
     except ConnectionResetError:
         p2_health = 0
 
@@ -243,18 +242,28 @@ def connect():
     net.connect()
 
 
-room = askstring("Enter room code", "Enter room code\nLeave empty for public room")
-if room is None:
-    exit(0)
-root = Tk()
-root.state("zoomed")
-root.title("Please wait")
+try:
+    room = askstring("Enter room code", "Enter room code\nLeave empty for public room")
+    if room is None:
+        exit(0)
+    root = Tk()
+    root.state("zoomed")
+    root.title("Please wait")
+    lbl = Label(text="Waiting for the other player to connect...", font=("TkDefaultFont", 32))
+    lbl.pack()
+except RuntimeError:
+    root = Tk()
+    root.state("zoomed")
+    root.title("Please wait")
+    lbl = Label(text="Waiting for the other player to connect...", font=("TkDefaultFont", 32))
+    lbl.pack()
+    room = askstring("Enter room code", "Enter room code\nLeave empty for public room")
+    if room is None:
+        exit(0)
 net = network.Network(1, broadcast_msg=f"SEARCH_FOR_CANNON_GAME_SERVER_{room}".encode("utf-8"),
                       broadcast_reply=f"THIS_IS_CANNON_GAME_SERVER_{room}".encode("utf-8"), log=False)
 connect_thread = threading.Thread(target=connect)
 connect_thread.start()
-lbl = Label(text="Waiting for the other player to connect...", font=("TkDefaultFont", 32))
-lbl.pack()
 while connect_thread.is_alive():
     root.update()
 lbl.destroy()

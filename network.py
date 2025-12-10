@@ -26,7 +26,7 @@ def listen_for_broadcast(ips: list[str], max_players: int = -1, msg: bytes = BRO
 
 
 def broadcast(timeout: float = 3, msg: bytes = BROADCAST_MSG, port: int = BROADCAST_PORT,
-              reply: bytes = BROADCAST_REPLY) -> str | None:
+              reply: bytes = BROADCAST_REPLY) -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     sock.settimeout(timeout)
@@ -52,7 +52,7 @@ def server(port: int = PORT, log: bool = LOG) -> socket.socket:
     return conn
 
 
-def client(server_ip: str, port: int = PORT, log: bool = LOG) -> socket.socket | None:
+def client(server_ip: str, port: int = PORT, log: bool = LOG) -> socket.socket:
     if log:
         print(f"[CLIENT] Trying to connect to {server_ip}:{port}")
     sock = socket.socket()
@@ -93,10 +93,16 @@ def send(sock: socket.socket, data: bytes) -> None:
 
 
 def recv(sock: socket.socket) -> bytes:
-    size = struct.unpack("<I", sock.recv(4))[0]
+    size_bytes = sock.recv(4)
+    if len(size_bytes) != 4:
+        raise ConnectionResetError("Couldn't read size")
+    size = struct.unpack("<I", size_bytes)[0]
     data = b""
     while len(data) < size:
-        data += sock.recv(size)
+        chunk = sock.recv(size - len(data))
+        if not chunk:
+            raise ConnectionResetError("Couldn't read data")
+        data += chunk
     return data
 
 
