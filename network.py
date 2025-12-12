@@ -68,9 +68,8 @@ def client(server_ip: str, port: int = PORT, log: bool = LOG) -> socket.socket:
 
 
 def get_sock(log: bool = LOG, timeout: float = 3, max_players: int = -1, msg: bytes = BROADCAST_MSG,
-             port: int = BROADCAST_PORT, reply: bytes = BROADCAST_REPLY) -> socket.socket:
+             port: int = BROADCAST_PORT, reply: bytes = BROADCAST_REPLY, ips: list[int] = ()) -> socket.socket:
     global IS_SERVER
-    ips = []
     threading.Thread(target=listen_for_broadcast, args=(ips, max_players, msg, port, reply), daemon=True).start()
     if log:
         print("[BROADCAST] Searching for an existing server")
@@ -115,7 +114,7 @@ def recv_str(sock: socket.socket) -> str:
 
 
 class Network:
-    def __init__(self, max_players: int = -1, port: int = PORT, broadcast_port: int = BROADCAST_PORT,
+    def __init__(self, max_players: int = 1, port: int = PORT, broadcast_port: int = BROADCAST_PORT,
                  broadcast_msg: bytes = BROADCAST_MSG, broadcast_reply: bytes = BROADCAST_REPLY, log: bool = LOG,
                  timeout: float = 3) -> None:
         self.sock: socket.socket | None = None
@@ -126,10 +125,11 @@ class Network:
         self.broadcast_reply: bytes = broadcast_reply
         self.log: bool = log
         self.timeout: float = timeout
+        self.ips = []
 
     def connect(self) -> None:
         self.sock = get_sock(self.log, self.timeout, self.max_players, self.broadcast_msg, self.broadcast_port,
-                             self.broadcast_reply)
+                             self.broadcast_reply, self.ips)
 
     def send(self, data: bytes) -> None:
         send(self.sock, data)
