@@ -16,6 +16,7 @@ NAIL_DIAMETER = 2
 NAIL_SPACE = 12
 PLATFORM_HEIGHT = 13
 SPEED = 100
+JUMP_SPEED = 200
 ROT_SPEED = 20
 RECHARGE = 0.5
 RECOIL = 150
@@ -27,6 +28,7 @@ AIR_FRICTION = 0.2
 GRAVITY = 300
 MAX_HEALTH = 100
 HIT_DAMAGE = 5
+SIMULATE_PING = 0
 
 
 def rotate_point(x: float, y: float, r: float) -> tuple[float, float]:
@@ -62,7 +64,7 @@ def get_rect_rot(x: float, y: float, width: float, height: float, r: float) -> l
 
 
 def onpress(e):
-    global p1_dx, p1_dr, p2_dx, p2_dr, p1_last_shot, p2_last_shot, p1_drecoil, p2_drecoil
+    global p1_dx, p1_dy, p1_dr, p1_last_shot, p1_drecoil
     key = e.keysym.lower()
     if key == "a":
         p1_dx = -SPEED
@@ -72,12 +74,15 @@ def onpress(e):
         p1_dr = -ROT_SPEED
     if key == "w":
         p1_dr = ROT_SPEED
-    if key in ("q", "e", "r", "f", "space") and time.time() - p1_last_shot > RECHARGE:
+    if key == "space" and p1_y >= FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2:
+        p1_dy = -JUMP_SPEED
+    if key in ("q", "e", "r", "f",
+               "shift_r", "next", "return", "control_r") and time.time() - p1_last_shot > RECHARGE:
         p1_drecoil = RECOIL
         pnt = rotate_point(WHEEL_SPACE + WHEEL_DIAMETER, 0, math.radians(-p1_r))
         speed = rotate_point(BALL_SPEED, 0, math.radians(-p1_r))
         balls.append([p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 + pnt[0],
-                      FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2 + pnt[1],
+                      p1_y - PLATFORM_HEIGHT / 2 + pnt[1],
                       speed[0], speed[1], "red"])
         p1_last_shot = time.time()
     if key == "left":
@@ -88,14 +93,6 @@ def onpress(e):
         p1_dr = -ROT_SPEED
     if key == "up":
         p1_dr = ROT_SPEED
-    if key in ("shift_r", "next", "return", "control_r") and time.time() - p1_last_shot > RECHARGE:
-        p1_drecoil = RECOIL
-        pnt = rotate_point(WHEEL_SPACE + WHEEL_DIAMETER, 0, math.radians(-p1_r))
-        speed = rotate_point(BALL_SPEED, 0, math.radians(-p1_r))
-        balls.append([p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 + pnt[0],
-                      FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2 + pnt[1],
-                      speed[0], speed[1], "red"])
-        p1_last_shot = time.time()
 
 
 def onrelease(e):
@@ -112,7 +109,8 @@ def onrelease(e):
 
 
 def update():
-    global last_time, p1_x, p1_r, p1_recoil, p1_drecoil, p1_health, p2_x, p2_r, p2_recoil, p2_drecoil, p2_health
+    global last_time, p1_x, p1_y, p1_dy, p1_r, p1_recoil, p1_drecoil, p1_health, p2_x, p2_y, p2_dy, p2_r, p2_recoil, \
+        p2_drecoil, p2_health
     p1_health_history.append(p1_health)
     p2_health_history.append(p2_health)
     if p1_health <= 0 or p2_health <= 0:
@@ -130,12 +128,18 @@ def update():
     tm = time.time() - last_time
     p1_x = min(640 - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5,
                max(0 + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p1_x + p1_dx * tm))
+    p1_dy += GRAVITY * tm
+    p1_y = min(FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2,
+               max(0, p1_y + p1_dy * tm))
     p1_r = min(89, max(1, p1_r + p1_dr * tm))
     p1_drecoil -= p1_drecoil * RECOIL_LOSS * tm
     p1_recoil += p1_drecoil * tm
     p1_recoil -= p1_recoil * RECOIL_LOSS * tm
     p2_x = min(640 - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5,
                max(0 + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p2_x + p2_dx * tm))
+    p2_dy += GRAVITY * tm
+    p2_y = min(FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2,
+               max(0, p2_y + p2_dy * tm))
     p2_r = min(89, max(1, p2_r + p2_dr * tm))
     p2_drecoil -= p2_drecoil * RECOIL_LOSS * tm
     p2_recoil += p2_drecoil * tm
@@ -153,12 +157,12 @@ def update():
         else:
             if (p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5 - BALL_DIAMETER / 2 <= i[0] <=
                     p1_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5 + BALL_DIAMETER / 2 and
-                    FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT <= i[1] <= FLOOR_HEIGHT):
+                    p1_y - PLATFORM_HEIGHT / 2 <= i[1] <= p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER):
                 p1_health -= HIT_DAMAGE
                 balls.remove(i)
             if (p2_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5 - BALL_DIAMETER / 2 <= i[0] <=
                     p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5 + BALL_DIAMETER / 2 and
-                    FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT <= i[1] <= FLOOR_HEIGHT):
+                    p2_y - PLATFORM_HEIGHT / 2 <= i[1] <= p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER):
                 p2_health -= HIT_DAMAGE
                 balls.remove(i)
     last_time = time.time()
@@ -167,56 +171,58 @@ def update():
     for i in balls:
         c.create_oval(i[0] - BALL_DIAMETER / 2, i[1] - BALL_DIAMETER / 2,
                       i[0] + BALL_DIAMETER / 2, i[1] + BALL_DIAMETER / 2, fill=i[4])
-    c.create_oval(p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, FLOOR_HEIGHT - WHEEL_DIAMETER,
-                  p1_x - WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, FLOOR_HEIGHT, fill="red")
-    c.create_oval(p1_x + WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, FLOOR_HEIGHT - WHEEL_DIAMETER,
-                  p1_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, FLOOR_HEIGHT, fill="red")
+    c.create_oval(p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, p1_y + PLATFORM_HEIGHT / 2,
+                  p1_x - WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER, fill="red")
+    c.create_oval(p1_x + WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, p1_y + PLATFORM_HEIGHT / 2,
+                  p1_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER, fill="red")
     for i in range(WHEEL_NAILS):
         x, y = rotate_point(NAIL_SPACE / 2, 0,
                             math.radians(p1_x / (WHEEL_DIAMETER * math.pi) * 360 + 360 / WHEEL_NAILS * i))
         c.create_oval(p1_x - WHEEL_SPACE / 2 + x - NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
+                      p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
                       p1_x - WHEEL_SPACE / 2 + x + NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="red")
+                      p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="red")
     for i in range(WHEEL_NAILS):
         x, y = rotate_point(NAIL_SPACE / 2, 0,
                             math.radians(p1_x / (WHEEL_DIAMETER * math.pi) * 360 + 360 / WHEEL_NAILS * i))
         c.create_oval(p1_x + WHEEL_SPACE / 2 + x - NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
+                      p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
                       p1_x + WHEEL_SPACE / 2 + x + NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="red")
+                      p1_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="red")
     pnt = rotate_point((WHEEL_SPACE + WHEEL_DIAMETER + 10) / 2 - p1_recoil, 0, math.radians(-p1_r))
     c.create_polygon(get_rect_rot(p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 + pnt[0],
-                                  FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2 + pnt[1],
+                                  p1_y + pnt[1],
                                   WHEEL_SPACE + WHEEL_DIAMETER + 5,
                                   PLATFORM_HEIGHT, p1_r), fill="red", outline="black")
-    c.create_rectangle(p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5, FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT,
-                       p1_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, FLOOR_HEIGHT - WHEEL_DIAMETER, fill="red")
-    c.create_oval(p2_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, FLOOR_HEIGHT - WHEEL_DIAMETER,
-                  p2_x - WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, FLOOR_HEIGHT, fill="green")
-    c.create_oval(p2_x + WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, FLOOR_HEIGHT - WHEEL_DIAMETER,
-                  p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, FLOOR_HEIGHT, fill="green")
+    c.create_rectangle(p1_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5, p1_y - PLATFORM_HEIGHT / 2,
+                       p1_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p1_y + PLATFORM_HEIGHT / 2, fill="red")
+    c.create_oval(p2_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, p2_y + PLATFORM_HEIGHT / 2,
+                  p2_x - WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER,
+                  fill="green")
+    c.create_oval(p2_x + WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2, p2_y + PLATFORM_HEIGHT / 2,
+                  p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2, p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER,
+                  fill="green")
     for i in range(WHEEL_NAILS):
         x, y = rotate_point(NAIL_SPACE / 2, 0,
                             math.radians(p2_x / (WHEEL_DIAMETER * math.pi) * 360 + 360 / WHEEL_NAILS * i))
         c.create_oval(p2_x - WHEEL_SPACE / 2 + x - NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
+                      p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
                       p2_x - WHEEL_SPACE / 2 + x + NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="green")
+                      p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="green")
     for i in range(WHEEL_NAILS):
         x, y = rotate_point(NAIL_SPACE / 2, 0,
                             math.radians(p2_x / (WHEEL_DIAMETER * math.pi) * 360 + 360 / WHEEL_NAILS * i))
         c.create_oval(p2_x + WHEEL_SPACE / 2 + x - NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
+                      p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y - NAIL_DIAMETER / 2,
                       p2_x + WHEEL_SPACE / 2 + x + NAIL_DIAMETER / 2,
-                      FLOOR_HEIGHT - WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="green")
+                      p2_y + PLATFORM_HEIGHT / 2 + WHEEL_DIAMETER / 2 + y + NAIL_DIAMETER / 2, fill="green")
     pnt = rotate_point(-(WHEEL_SPACE + WHEEL_DIAMETER + 10) / 2 + p2_recoil, 0, math.radians(p2_r))
     c.create_polygon(get_rect_rot(p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + pnt[0],
-                                  FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT / 2 + pnt[1],
+                                  p2_y + pnt[1],
                                   WHEEL_SPACE + WHEEL_DIAMETER + 5,
                                   PLATFORM_HEIGHT, 180 - p2_r), fill="green", outline="black")
-    c.create_rectangle(p2_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5, FLOOR_HEIGHT - WHEEL_DIAMETER - PLATFORM_HEIGHT,
-                       p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, FLOOR_HEIGHT - WHEEL_DIAMETER, fill="green")
+    c.create_rectangle(p2_x - WHEEL_SPACE / 2 - WHEEL_DIAMETER / 2 - 5, p2_y - PLATFORM_HEIGHT / 2,
+                       p2_x + WHEEL_SPACE / 2 + WHEEL_DIAMETER / 2 + 5, p2_y + PLATFORM_HEIGHT / 2, fill="green")
     c.create_rectangle(10, 10, MAX_HEALTH + 10, 20)
     c.create_rectangle(10, 10, p1_health + 10, 20, fill="red")
     c.create_rectangle(630 - MAX_HEALTH, 10, 630, 20)
@@ -225,14 +231,16 @@ def update():
 
 
 def update_net():
-    global p2_x, p2_dx, p2_r, p2_dr, p2_recoil, p2_drecoil, p2_health, balls
+    global p2_x, p2_dx, p2_y, p2_dy, p2_r, p2_dr, p2_recoil, p2_drecoil, p2_health, balls
     try:
         while True:
             net.send_str(json.dumps(
-                [640 - p1_x, -p1_dx, p1_r, p1_dr, p1_recoil, p1_drecoil, p1_health,
+                [640 - p1_x, -p1_dx, p1_y, p1_dy, p1_r, p1_dr, p1_recoil, p1_drecoil, p1_health,
                  [[640 - i[0], i[1], -i[2], i[3], "green"] for i in balls if i[4] == "red"]]))
-            p2_x, p2_dx, p2_r, p2_dr, p2_recoil, p2_drecoil, p2_health, b = json.loads(net.recv_str())
+            p2_x, p2_dx, p2_y, p2_dy, p2_r, p2_dr, p2_recoil, p2_drecoil, p2_health, b = json.loads(net.recv_str())
             balls = [i for i in balls if i[4] == "red"] + b
+            if SIMULATE_PING > 0:
+                time.sleep(SIMULATE_PING)
     except ConnectionResetError:
         p2_health = 0
 
@@ -240,6 +248,14 @@ def update_net():
 def connect():
     global net
     net.connect()
+
+
+def onclose():
+    global opened
+    if opened:
+        opened = False
+    else:
+        root.destroy()
 
 
 try:
@@ -262,10 +278,16 @@ except RuntimeError:
         exit(0)
 net = network.Network(1, broadcast_msg=f"SEARCH_FOR_CANNON_GAME_SERVER_{room}".encode("utf-8"),
                       broadcast_reply=f"THIS_IS_CANNON_GAME_SERVER_{room}".encode("utf-8"), log=False)
-connect_thread = threading.Thread(target=connect)
+connect_thread = threading.Thread(target=connect, daemon=True)
 connect_thread.start()
+root.protocol("WM_DELETE_WINDOW", onclose)
+opened = True
 while connect_thread.is_alive():
+    if not opened:
+        root.destroy()
+        exit(0)
     root.update()
+opened = False
 lbl.destroy()
 root.title("Battle")
 c = Canvas(width=640, height=640, bg="white")
@@ -273,6 +295,8 @@ c.pack()
 
 p1_x = 150
 p1_dx = 0
+p1_y = 0
+p1_dy = 0
 p1_r = 25
 p1_dr = 0
 p1_recoil = 0
@@ -282,6 +306,8 @@ p1_health = MAX_HEALTH
 p1_health_history = []
 p2_x = 490
 p2_dx = 0
+p2_y = 0
+p2_dy = 0
 p2_r = 25
 p2_dr = 0
 p2_recoil = 0
